@@ -242,6 +242,7 @@ if __name__ == '__main__':
 
     import sys
     from scipy.io import mmread
+    from scipy import sparse
 
     data = mmread(sys.argv[1]).tocsr()
 
