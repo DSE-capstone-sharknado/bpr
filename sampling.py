@@ -8,7 +8,7 @@ class Sampler(object):
 
     def init(self,data,max_samples=None):
         self.data = data
-        self.num_users,self.num_items = data.shape
+        self.num_users,self.num_items = data.shape #expects a user/item matrix
         self.max_samples = max_samples
 
     def sample_user(self):
@@ -47,6 +47,7 @@ class UniformUserUniformItem(Sampler):
 
     def generate_samples(self,data,max_samples=None):
         self.init(data,max_samples)
+        #nnz is the count of non-zero entries
         for _ in xrange(self.num_samples(self.data.nnz)):
             u = self.uniform_user()
             # sample positive item
@@ -57,7 +58,7 @@ class UniformUserUniformItem(Sampler):
 class UniformUserUniformItemWithoutReplacement(Sampler):
 
     def generate_samples(self,data,max_samples=None):
-        self.init(self,data,max_samples)
+        self.init(data,max_samples)
         # make a local copy of data as we're going to "forget" some entries
         self.local_data = self.data.copy()
         for _ in xrange(self.num_samples(self.data.nnz)):
@@ -92,14 +93,14 @@ class UniformPairWithoutReplacement(Sampler):
         self.init(data,max_samples)
         idxs = range(self.data.nnz)
         random.shuffle(idxs)
-        self.users,self.items = self.data.nonzero()
+        self.users, self.items = self.data.nonzero()
         self.users = self.users[idxs]
         self.items = self.items[idxs]
         self.idx = 0
         for _ in xrange(self.num_samples(self.data.nnz)):
             u = self.users[self.idx]
             i = self.items[self.idx]
-            j = self.sample_negative_item(self.data[u])
+            j = self.sample_negative_item(self.data[u].todense())
             self.idx += 1
             yield u,i,j
 

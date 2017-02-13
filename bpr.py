@@ -4,9 +4,9 @@ Bayesian Personalized Ranking
 Matrix Factorization model and a variety of classes
 implementing different sampling strategies.
 """
-
+import sys
 import numpy as np
-from math import exp
+from math import exp, log
 import random
 from sampling import UniformPairWithoutReplacement, UniformUserUniformItem
 
@@ -15,9 +15,9 @@ class BPRArgs(object):
 
     def __init__(self,learning_rate=0.05,
                  bias_regularization=1.0,
-                 user_regularization=0.0025,
-                 positive_item_regularization=0.0025,
-                 negative_item_regularization=0.00025,
+                 user_regularization=1.0,
+                 positive_item_regularization=1.0,
+                 negative_item_regularization=1.0,
                  update_negative_item_factors=True):
         self.learning_rate = learning_rate
         self.bias_regularization = bias_regularization
@@ -26,10 +26,11 @@ class BPRArgs(object):
         self.negative_item_regularization = negative_item_regularization
         self.update_negative_item_factors = update_negative_item_factors
 
+
 class BPR(object):
 
     def __init__(self,D,args):
-        """initialise BPR matrix factorization model
+        """initialize BPR matrix factorization model
         D: number of factors
         """
         self.D = D
@@ -39,6 +40,7 @@ class BPR(object):
         self.positive_item_regularization = args.positive_item_regularization
         self.negative_item_regularization = args.negative_item_regularization
         self.update_negative_item_factors = args.update_negative_item_factors
+        self.i=0
 
     def train(self, data, sampler, num_iters):
         """train model
@@ -62,49 +64,61 @@ class BPR(object):
         self.user_factors = np.random.random_sample((self.num_users,self.D))
         self.item_factors = np.random.random_sample((self.num_items,self.D))
 
-        self.create_loss_samples()
+        self.create_loss_samples(data)
 
-    def create_loss_samples(self):
+    def create_loss_samples(self, data):
         # apply rule of thumb to decide num samples over which to compute loss
         num_loss_samples = int(100*self.num_users**0.5)
 
         print 'sampling {0} <user,item i,item j> triples...'.format(num_loss_samples)
         sampler = UniformUserUniformItem(True)
-        self.loss_samples = [t for t in sampler.generate_samples(data,num_loss_samples)]
+        self.loss_samples = [t for t in sampler.generate_samples(data, num_loss_samples)]
 
-    def update_factors(self,u,i,j,update_u=True,update_i=True):
+    def update_factors(self,u,i,j):
         """apply SGD update"""
-        update_j = self.update_negative_item_factors
+        
+        # xuij = xui - xuj
+        # xuij = alpha + beta_u + beta_i + dot(gamma_U, gamma_I) - (alpha + beta_u + beta_j + dot(gamma_U, gamma_J))
+        # xuij = beta_i - beta_j + dot(g_U, g_I) - dot(g_U, g_J)
 
-        x = self.item_bias[i] - self.item_bias[j] \
-            + np.dot(self.user_factors[u,:],self.item_factors[i,:]-self.item_factors[j,:])
+        xuij = self.item_bias[i] - self.item_bias[j]
+        xuij+= np.dot(self.user_factors[u], self.item_factors[i]) - np.dot(self.user_factors[u], self.item_factors[j])
+        # print np.mean(self.user_factors),np.mean(self.item_factors)
 
-        z = 1.0/(1.0+exp(x))
+        #TODO: xuij value grows uncontrollably. When it passes ~300 it breaks the exp function (overflow). 
+        # It probably somethign wrone w/ one of the update function below: I think item_factors has coeffs in 100 magnitude
+        #when it should be very small numbers. 
+        z = 1.0/(1.0+exp(xuij)) # term of the deriviative of xuij
 
         # update bias terms
-        if update_i:
-            d = z - self.bias_regularization * self.item_bias[i]
-            self.item_bias[i] += self.learning_rate * d
-        if update_j:
-            d = -z - self.bias_regularization * self.item_bias[j]
-            self.item_bias[j] += self.learning_rate * d
+        d = z - self.bias_regularization * self.item_bias[i]
+        self.item_bias[i] += self.learning_rate * d
+        
+        d = -z - self.bias_regularization * self.item_bias[j]
+        self.item_bias[j] += self.learning_rate * d
 
-        if update_u:
-            d = (self.item_factors[i,:]-self.item_factors[j,:])*z - self.user_regularization*self.user_factors[u,:]
-            self.user_factors[u,:] += self.learning_rate*d
-        if update_i:
-            d = self.user_factors[u,:]*z - self.positive_item_regularization*self.item_factors[i,:]
-            self.item_factors[i,:] += self.learning_rate*d
-        if update_j:
-            d = -self.user_factors[u,:]*z - self.negative_item_regularization*self.item_factors[j,:]
-            self.item_factors[j,:] += self.learning_rate*d
+        #run the 3 partial deriviatives (2 variables: W & H)
+        #update the user vector w = w + n(z * (item_i - item_j) - reg...)
+        d = (self.item_factors[i]-self.item_factors[j])*z - self.user_regularization*self.user_factors[u]
+        self.user_factors[u] += self.learning_rate*d
+            
+        #update the pos item factor: h = h+ n(z * w - reg..)
+        d = self.user_factors[u]*z - self.positive_item_regularization*self.item_factors[i]
+        self.item_factors[i] += self.learning_rate*d
+            
+        #update the pos item factor: h = h+ n(-z * w - reg..)
+        d = -self.user_factors[u]*z - self.negative_item_regularization *self.item_factors[j]
+        self.item_factors[j] += self.learning_rate*d
+        
+        self.i+=1
 
     def loss(self):
         ranking_loss = 0;
         for u,i,j in self.loss_samples:
             x = self.predict(u,i) - self.predict(u,j)
-            ranking_loss += 1.0/(1.0+exp(x))
-
+            
+            ranking_loss += 1.0/(1.0+np.exp(x))
+            
         complexity = 0;
         for u,i,j in self.loss_samples:
             complexity += self.user_regularization * np.dot(self.user_factors[u],self.user_factors[u])
@@ -121,22 +135,4 @@ class BPR(object):
 
 
 if __name__ == '__main__':
-
-    # learn a matrix factorization with BPR like this:
-
-    import sys
-    from scipy.io import mmread
-    from scipy import sparse
-
-    data = mmread(sys.argv[1]).tocsr()
-
-    args = BPRArgs()
-    args.learning_rate = 0.3
-
-    num_factors = 10
-    model = BPR(num_factors,args)
-
-    sample_negative_items_empirically = True
-    sampler = UniformPairWithoutReplacement(sample_negative_items_empirically)
-    num_iters = 10
-    model.train(data,sampler,num_iters)
+  pass
