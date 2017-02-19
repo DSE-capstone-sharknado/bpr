@@ -15,7 +15,7 @@ from bpr import BPRArgs, BPR
 args = BPRArgs(  bias_regularization=0.5,
                  user_regularization=0.5,
                  positive_item_regularization=0.5,
-                 negative_item_regularization=0.5,learning_rate = 0.005)
+                 negative_item_regularization=0.5,learning_rate = 0.1)
 
 K = 10
 model = BPR(K, args)
