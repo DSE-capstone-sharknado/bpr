@@ -43,10 +43,24 @@ def load_to_user_item_matrix(path):
     uimatrix[review[0],review[1]]=True
       
   return np.array(uimatrix)
+
+def test_train_split(uimatrix):
+  test_items=[]
+  for u, u_row in enumerate(uimatrix):
+     nzidx=u_row.nonzero()[0]#get pos indicies
+     #choose random
+     i = np.random.choice(nzidx)
+     test_items.append(i)
+     #now remove from train set
+     uimatrix[u][i]=False
+  return np.array(uimatrix), np.array(test_items)
+
   
   
 if __name__ == '__main__':
   #load dataset
-  reviews = load_to_user_item_matrix('../reviews.csv')
-  print reviews[:199,:]
+  reviews = load_to_user_item_matrix('../reviews_1000.csv')
+  # print reviews[:199,:]
+  
+  train_set, test_set = test_train_split(reviews)
   
