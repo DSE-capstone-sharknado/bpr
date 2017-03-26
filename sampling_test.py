@@ -26,10 +26,10 @@ for lam in [.1, .2, .3, .4, .5, .6, .7, .8, .9]:
                    positive_item_regularization=lam,
                    negative_item_regularization=lam,
                    learning_rate = lr)
-  K = 20
+  K = 10
   model = BPR(K, args)
 
-  num_iters = 10
+  num_iters = 3
   losses=model.train(data,sampler,num_iters)
   test_loss = model.auc_w_sampler(test_set)
   print "test acu: %f"%test_loss

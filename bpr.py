@@ -144,7 +144,7 @@ class BPR(object):
             complexity += self.bias_regularization * self.item_bias[i]**2
             complexity += self.bias_regularization * self.item_bias[j]**2
 
-        return ranking_loss + 0.5*complexity
+        return (ranking_loss + 0.5*complexity) / (len(self.loss_samples))
         
     #average of AUC for each user
     #TP / TP+FN
@@ -165,7 +165,7 @@ class BPR(object):
       
     def auc_w_sampler(self, test_set):
       AUC_u_test = []
-      num_samples = 1200 # half the tiems
+      num_samples = 1200 # half the times
       print "num auc test samples: %d"%num_samples
       
       for u,i in enumerate(test_set):
